@@ -3,17 +3,10 @@
 
 # Python cache
 __pycache__/
-*.py[cod]
+*.pyc
 
-# Pytest cache
-.pytest_cache/
-
-# Environment variables and secrets
+# Environment variables / secrets
 .env
-.env.*
 
 # macOS
 .DS_Store
-
-# IDE settings
-.vscode/
