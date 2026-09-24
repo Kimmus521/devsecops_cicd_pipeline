@@ -9,6 +9,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -25,13 +28,30 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install flake8
+          python -m pip install -r requirements.txt bandit
 
       - name: Run Flake8
         run: |
-          flake8 . --exclude=.venv
+          python -m flake8 app.py tests
 
       - name: Run Unit Tests
         run: |
-          pytest
+          python -m pytest
+
+      - name: Scan application code with Bandit
+        run: |
+          python -m bandit app.py
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository and history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Scan git history with Gitleaks
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
