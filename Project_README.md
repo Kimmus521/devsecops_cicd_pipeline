@@ -38,7 +38,7 @@ GitHub Actions
 | 0    | Environment & Repository Setup | ✅ Completed |
 | 1    | Python Web Application         | ✅ Completed |
 | 2    | GitHub Actions CI              | ✅ Completed |
-| 3    | SAST & Secret Scanning         | ⬜ Planned   |
+| 3    | SAST & Secret Scanning         | ✅ Completed |
 | 4    | Docker & Container Security    | ⬜ Planned   |
 | 5    | AWS IAM & OIDC                 | ⬜ Planned   |
 | 6    | Automated Deployment           | ⬜ Planned   |
@@ -371,12 +371,33 @@ Future stages will extend the pipeline with:
 
 ## Week 3 — SAST & Secret Scanning
 
-Planned tools:
+The workflow now runs two security checks on pushes and pull requests:
 
-* Bandit
-* Gitleaks
+* **Bandit** checks `app.py` for Python security issues after lint and tests.
+  It scans application code so pytest's normal `assert` statements do not produce B101 findings.
+* **Gitleaks** checks git history for accidentally committed secrets in a separate CI job.
+  The checkout uses `fetch-depth: 0` to provide the commit history.
 
-The goal is to automatically identify potential security vulnerabilities and accidentally exposed secrets.
+The Flask entry point was changed to a single `app.run()` without debug mode.
+The `.venv_repair/` directory is ignored so local dependencies do not appear as Git changes.
+
+Run the Python checks locally from the repository root:
+
+```bash
+python -m pip install -r requirements.txt bandit
+python -m flake8 app.py tests
+python -m pytest
+python -m bandit app.py
+```
+
+SAST checks source code without running the application. Secret scanning checks for
+credentials accidentally stored in the repository, including prior commits. A
+finding needs review before treating it as a real vulnerability; do not commit a
+real or example credential to test the scanner. A clean scan does not guarantee
+that every vulnerability or secret has been found.
+
+**Verification:** On September 24, 2026, both the `test` and `secret-scan` jobs
+passed on `main` at commit `087fbf9`.
 
 ## Week 4 — Docker & Container Security
 
