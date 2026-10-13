@@ -55,3 +55,35 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: "false"
+
+  container-security:
+    runs-on: ubuntu-latest
+    needs: [test, secret-scan]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Build Docker image
+        run: docker build --pull -t devsecops-app:ci .
+
+      - name: Test application inside image
+        run: |
+          docker run --rm devsecops-app:ci \
+            python -m pytest -p no:cacheprovider
+
+      - name: Export image for scanning
+        run: |
+          docker save \
+            -o "${{ runner.temp }}/devsecops-image.tar" \
+            devsecops-app:ci
+
+      - name: Scan image with Trivy
+        run: |
+          docker run --rm \
+            -v "${{ runner.temp }}:/scan:ro" \
+            aquasec/trivy:0.75.0 image \
+            --input /scan/devsecops-image.tar \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --exit-code 1
