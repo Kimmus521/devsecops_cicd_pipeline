@@ -15,7 +15,8 @@ RUN python -m pip install --no-cache-dir --upgrade "pip==26.2.0" \
     && python -m pip install --no-cache-dir gunicorn \
     && python -m pip uninstall -y pip
 
-RUN useradd --create-home appuser
+RUN useradd --create-home appuser \
+    && chmod u-s /usr/bin/mount
 
 COPY --chown=appuser:appuser . .
 

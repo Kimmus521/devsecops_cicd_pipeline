@@ -69,7 +69,10 @@ jobs:
 
       - name: Test application inside image
         run: |
-          docker run --rm devsecops-app:ci \
+          docker run --rm \
+            --cap-drop=ALL \
+            --security-opt no-new-privileges=true \
+            devsecops-app:ci \
             python -m pytest -p no:cacheprovider
 
       - name: Export image for scanning
