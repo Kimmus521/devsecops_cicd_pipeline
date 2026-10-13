@@ -1,0 +1,16 @@
+vulnerabilities:
+  - id: CVE-2026-16742
+    expired_at: 2026-11-12
+    statement: >-
+      Reviewed on 2026-10-13 for devsecops-app:runtime.
+      systemd-homed was not found in PATH or at
+      /usr/lib/systemd/systemd-homed and /lib/systemd/systemd-homed.
+      Recheck if the base image or installed packages change.
+
+  - id: CVE-2026-9538
+    expired_at: 2026-11-12
+    statement: >-
+      Reviewed on 2026-10-13 for devsecops-app:runtime.
+      Loading Perl Archive::Tar failed because the module was not found.
+      The application does not use Perl archive processing.
+      Recheck if the base image or installed packages change.
