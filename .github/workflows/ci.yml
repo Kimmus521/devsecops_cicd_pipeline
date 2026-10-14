@@ -85,10 +85,8 @@ jobs:
         run: |
           docker run --rm \
             -v "${{ runner.temp }}:/scan:ro" \
-            -v "${{ github.workspace }}/.trivyignore.yaml:/policy/.trivyignore.yaml:ro" \
             aquasec/trivy:0.75.0 image \
             --input /scan/devsecops-image.tar \
-            --ignorefile /policy/.trivyignore.yaml \
             --scanners vuln \
             --severity HIGH,CRITICAL \
             --exit-code 1

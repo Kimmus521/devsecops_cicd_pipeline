@@ -1,22 +1,19 @@
-FROM python:3.12-slim
+FROM python:3.12-alpine3.24
 
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends --only-upgrade liblzma5 \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk upgrade --no-cache
 
 COPY requirements.txt .
 RUN python -m pip install --no-cache-dir --upgrade "pip==26.2.0" \
     && python -m pip install --no-cache-dir -r requirements.txt \
-    && python -m pip install --no-cache-dir gunicorn \
+    && python -m pip install --no-cache-dir "gunicorn==26.2.0" \
     && python -m pip uninstall -y pip
 
-RUN useradd --create-home appuser \
-    && chmod u-s /usr/bin/mount
+RUN adduser -D -u 1000 appuser
 
 COPY --chown=appuser:appuser . .
 
