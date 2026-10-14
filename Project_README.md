@@ -39,7 +39,7 @@ GitHub Actions
 | 1    | Python Web Application         | ✅ Completed |
 | 2    | GitHub Actions CI              | ✅ Completed |
 | 3    | SAST & Secret Scanning         | ✅ Completed |
-| 4    | Docker & Container Security    | ⬜ Planned   |
+| 4    | Docker & Container Security    | ✅ Completed |
 | 5    | AWS IAM & OIDC                 | ⬜ Planned   |
 | 6    | Automated Deployment           | ⬜ Planned   |
 | 7    | Documentation & Finalization   | ⬜ Planned   |
@@ -293,39 +293,39 @@ This creates an initial quality gate before future security and deployment stage
 
 # 🔐 Current DevSecOps Architecture
 
-At the end of Week 2, the project has established the foundation for the complete DevSecOps pipeline.
+At the end of Week 4, pushes to `main` and pull requests targeting `main`
+automatically run code checks, secret scanning, and container security checks.
 
 ```text
-                  Developer
-                      │
-                      ▼
-              VS Code / Local
-                      │
-                git commit
-                      │
-                      ▼
-               GitHub Repository
-                      │
-                  git push
-                      │
-                      ▼
-              GitHub Actions
-                      │
-              ┌───────┴───────┐
-              ▼               ▼
-           Flake8           Pytest
-          Code Quality       Testing
-              │               │
-              └───────┬───────┘
-                      ▼
-                 CI Result
+Developer → GitHub push / pull request → GitHub Actions
+                                            │
+                         ┌──────────────────┴──────────────────┐
+                         ▼                                     ▼
+                       test                               secret-scan
+                Install dependencies                   Full-history checkout
+                Flake8 → Pytest → Bandit                     Gitleaks
+                         │                                     │
+                         └──────────────────┬──────────────────┘
+                                            │ both jobs must pass
+                                            ▼
+                                    container-security
+                                    Build Docker image
+                                    Test inside image
+                                    Export image as tar
+                                    Scan with Trivy
+                                            │
+                            HIGH / CRITICAL → Fail CI
+                            No matching findings → Pass CI
 ```
+
+AWS authentication, image publishing, and deployment are planned next; the
+current workflow does not deploy the application.
 
 ---
 
 # 🧠 What I Learned
 
-Through the first two weeks, I learned the fundamentals of connecting local software development with Git and automated CI.
+Through Weeks 0–4, I learned how to connect local development, automated checks, container execution, and security gates.
 
 ### Git & GitHub
 
@@ -356,18 +356,20 @@ Through the first two weeks, I learned the fundamentals of connecting local soft
 
 The project is designed around the principle of integrating security into the development lifecycle rather than adding security only after development is complete.
 
-Future stages will extend the pipeline with:
+The implemented security checks include Bandit, Gitleaks, and Trivy.
 
-* SAST
-* Secret scanning
-* Container vulnerability scanning
-* AWS IAM
-* OIDC authentication
-* Automated deployment
+* Distinguishing package findings from exploitable application behavior
+* Updating dependencies and removing unnecessary installation tooling
+* Recording evidence and expiration dates for temporary exceptions
+* Comparing base images using tests and vulnerability scans
+* Running containers as a non-root user with restricted capabilities
+* Keeping HIGH/CRITICAL security gates enabled while remediating findings
+
+Future stages will add AWS IAM, OIDC authentication, and automated deployment.
 
 ---
 
-# 🚀 Next Steps
+# Completed Security Milestones
 
 ## Week 3 — SAST & Secret Scanning
 
@@ -401,21 +403,199 @@ passed on `main` at commit `087fbf9`.
 
 ## Week 4 — Docker & Container Security
 
-Planned tasks:
+**Status: Completed.** The Flask application is containerized, runs locally,
+and passes automated container tests and the HIGH/CRITICAL vulnerability gate
+in GitHub Actions.
 
-* Create a Dockerfile
-* Containerize the Flask application
-* Build the Docker image
-* Scan the image with Trivy
-* Introduce vulnerability-based CI gates
+### Current Container Configuration
+
+| Component | Current configuration |
+| --- | --- |
+| Base image | `python:3.12-alpine3.24` |
+| OS package updates | `apk upgrade --no-cache` during the build |
+| Application server | Gunicorn `26.2.0`, bound to `0.0.0.0:8000` |
+| Runtime user | `appuser`, UID 1000 |
+| Python dependencies | Installed from `requirements.txt`; Werkzeug `3.1.9` |
+| pip | Updated to `26.2.0` for installation, then uninstalled from the final image |
+| Container test settings | `--cap-drop=ALL` and `--security-opt no-new-privileges=true` |
+| CI scanner | Official `aquasec/trivy:0.75.0` container |
+| CI failure threshold | HIGH or CRITICAL findings, using `--exit-code 1` |
+| Active vulnerability exceptions | None; the Debian-specific ignore file was removed |
+
+The `.dockerignore` excludes Git history, local virtual environments, Python
+caches, `.env` files, and macOS metadata from the build context.
+
+The current image still includes test and lint dependencies from
+`requirements.txt`. Separating development dependencies from runtime
+dependencies is a future image-size and maintenance improvement.
+
+Capability restrictions and `no-new-privileges` are container execution
+settings. They are applied explicitly in CI tests and the local commands below,
+and must also be configured in the future deployment environment.
+
+### Build and Run Locally
+
+Run these commands from the repository root with Docker Desktop running:
+
+```bash
+docker build --pull -t devsecops-app:local .
+
+docker run --rm \
+  --cap-drop=ALL \
+  --security-opt no-new-privileges=true \
+  devsecops-app:local \
+  python -m pytest -p no:cacheprovider
+```
+
+The current test suite covers `/`, `/health`, and `/api/message` and passed
+with **3 tests** during local verification.
+
+Start the web server:
+
+```bash
+docker run -d \
+  --name devsecops-local \
+  --cap-drop=ALL \
+  --security-opt no-new-privileges=true \
+  -p 127.0.0.1:8080:8000 \
+  devsecops-app:local
+
+curl -i http://localhost:8080/health
+```
+
+Expected response: HTTP `200 OK` with `{"status":"healthy"}`. The root endpoint
+at `http://localhost:8080/` returns `DevSecOps CI/CD Pipeline`.
+
+The port mapping connects host port 8080 to container port 8000 and restricts
+access to the local machine. `EXPOSE 8000` alone does not publish the port.
+If host port 8080 is occupied, change the host-side number and the curl URL.
+If the name `devsecops-local` already exists, inspect it with `docker ps -a`
+and use a new name or remove the old container when it is no longer needed.
+
+```bash
+docker logs devsecops-local
+docker stop devsecops-local
+docker rm devsecops-local
+```
+
+### Scan the Image Locally
+
+Install Trivy on macOS if it is not already installed:
+
+```bash
+brew install trivy
+trivy --version
+```
+
+Inspect findings across all severities, then check the same threshold as CI:
+
+```bash
+trivy image --image-src docker --scanners vuln devsecops-app:local
+
+trivy image --image-src docker --scanners vuln \
+  --severity HIGH,CRITICAL --exit-code 1 devsecops-app:local
+```
+
+The gate returns exit code 1 when matching vulnerabilities are detected; scan
+errors can also fail the command and should be checked in the logs. An
+unfiltered scan is useful for reviewing LOW, MEDIUM, and UNKNOWN findings that
+are not part of the CI threshold.
+
+### Vulnerability Findings and Remediation
+
+The initial Debian-based image used `python:3.12-slim`. Its first local scan
+reported **173 package findings**: 166 OS findings and 7 Python findings.
+The 44 HIGH findings represented 8 distinct CVEs, repeated across packages.
+
+| Verification stage | Scope | Result |
+| --- | --- | --- |
+| Initial Debian image | All severities | 173 findings; 44 HIGH; 0 CRITICAL |
+| Updated pip, Werkzeug, and liblzma5 | All severities | 170 findings; the original 9 targeted findings disappeared, but 6 pip-vendored findings were detected |
+| Removed pip after dependency installation | All severities | 164 OS findings; 0 Python findings; 44 HIGH |
+| Applied reviewed Debian exceptions | HIGH/CRITICAL only | 41 HIGH; 0 CRITICAL |
+| Alpine comparison image, without specifying exceptions | All severities | 0 findings detected in the local scan |
+| Alpine image in GitHub Actions | HIGH/CRITICAL only | Container-security job passed without an ignore file |
+
+The remediation process included:
+
+1. Updating Werkzeug from `3.1.8` to `3.1.9` and pip from `25.0.1` to `26.2.0`.
+2. Updating Debian's `liblzma5` to a version with the available fix.
+3. Investigating new findings in pip's vendored `msgpack`, `setuptools`, and
+   `urllib3`; these were internal copies rather than separately installed app
+   dependencies. Removing pip after installation removed these six findings
+   from the subsequent report.
+4. Reviewing systemd and Perl findings against the image. `systemd-homed` was
+   not found in PATH or the checked system locations, and Perl could not load
+   `Archive::Tar`. Temporary exceptions were documented for
+   `CVE-2026-16742` and `CVE-2026-9538`, with an expiration date of November 12,
+   2026. Those exceptions suppressed three package findings and are preserved
+   in Git history.
+5. Removing the Debian image's mount SUID bit and validating the app with
+   capabilities dropped and new privilege acquisition disabled. These controls
+   reduced attack opportunities but did not change the package-version scan
+   results.
+6. Comparing an Alpine-based image, verifying its tests, scanning it without
+   Debian exceptions, and confirming the Gunicorn `/health` response before
+   adopting it as the default Dockerfile.
+
+The Alpine choice was supported by this application's observed test and scan
+results. It is not a guarantee that Alpine is universally safer: it uses musl
+instead of glibc, so dependencies must be checked for compatibility. Scanner
+results are a snapshot of known vulnerabilities and database coverage at the
+time of inspection, not proof that an image has no vulnerabilities.
+
+### GitHub Actions Verification
+
+On **October 13, 2026**, workflow run **#8**, at commit **`05b9229`**, passed all
+three jobs on `main`:
+
+* `test`: Flake8, Pytest, and Bandit.
+* `secret-scan`: Gitleaks, with no leaks detected.
+* `container-security`: Docker build, tests inside the image, image export,
+  and the Trivy HIGH/CRITICAL gate.
+
+[View the successful CI run](https://github.com/Kimmus521/devsecops_cicd_pipeline/actions/runs/38487896418)
+
+The container job waits for both `test` and `secret-scan` using
+`needs: [test, secret-scan]`. It exports the image to a tar file and mounts that
+file read-only into the Trivy container. The gate remains enabled and no
+vulnerability ignore file is passed to the scanner.
+
+The successful run still reported a Node.js deprecation warning for older
+actions in the `test` job and notices about an upcoming `ubuntu-latest` image
+change. Action upgrades and an explicit runner OS version remain maintenance
+tasks. The current local workflow selects Python 3.12; the referenced run is
+historical evidence for its own committed workflow.
+
+### Remaining Improvements Before and During Deployment
+
+* Update the older checkout and setup-python actions in the `test` job.
+* Add an automated HTTP smoke test for the Gunicorn `/health` endpoint in CI;
+  the current CI container test uses Flask's test client through Pytest.
+* Separate runtime dependencies from development and test tools.
+* Preserve complete scan reports as CI artifacts, in addition to the gate log.
+* Review immutable image/action references and an update process for them.
+* Reapply and verify runtime privilege restrictions when configuring AWS.
+
+### Reference Documentation
+
+* [Docker build best practices](https://docs.docker.com/build/building/best-practices/)
+* [Python official image variants](https://github.com/docker-library/docs/blob/master/python/README.md)
+* [Trivy image scanning](https://trivy.dev/docs/latest/guide/target/container_image/)
+* [Trivy exception configuration](https://trivy.dev/docs/latest/guide/configuration/filtering/)
+
+---
+
+# 🚀 Next Steps
 
 ## Week 5 — AWS IAM & OIDC
 
 Planned tasks:
 
-* Configure GitHub Actions OIDC
-* Create a least-privilege AWS IAM role
-* Avoid storing long-term AWS access keys in GitHub
+* Configure GitHub Actions OIDC.
+* Create a least-privilege AWS IAM role with repository and branch restrictions.
+* Avoid storing long-term AWS access keys in GitHub.
+* Create an Amazon ECR repository and publish images only after successful CI.
 
 ## Week 6 — Continuous Deployment
 
@@ -424,7 +604,9 @@ Planned AWS services:
 * Amazon ECR
 * Amazon ECS Fargate
 
-The pipeline will automatically deploy the application after successful CI checks.
+The planned pipeline will deploy the image that passed CI to ECS Fargate,
+verify application health, and define a rollback procedure. AWS deployment is
+not implemented yet.
 
 ## Week 7 — Documentation & Finalization
 
